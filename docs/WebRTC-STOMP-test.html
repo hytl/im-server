@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebRTC Auto Call Test</title>
+    <script src="https://cdn.jsdelivr.net/npm/stompjs/lib/stomp.min.js"></script>
+    <style>
+        /* 容器样式 */
+        .video-wrapper {
+            display: flex;
+            justify-content: space-between;
+            width: 800px;
+            margin: 20px auto;
+        }
+
+        /* 单个视频容器样式 */
+        .video-container {
+            position: relative;
+            width: 48%;
+            height: 300px;
+            background-color: black;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        /* 视频标签样式 */
+        .video-container video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: none;
+            /* 初始隐藏视频 */
+        }
+
+        /* 本地和远程标签样式 */
+        .video-label {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-size: 16px;
+            font-weight: bold;
+        }
+
+        /* 按钮容器样式 */
+        .button-container {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            /* 按钮之间的间距 */
+            margin-top: 20px;
+        }
+
+        /* 通用按钮样式 */
+        .button-container button {
+            padding: 10px 20px;
+            font-size: 16px;
+            font-weight: bold;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s ease, transform 0.2s ease;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Call 按钮样式 */
+        #callButton {
+            background-color: #007bff;
+            /* 蓝色 */
+        }
+
+        #callButton:hover {
+            background-color: #0056b3;
+            /* 深蓝色 */
+            transform: translateY(-2px);
+        }
+
+        /* Hangup 按钮样式 */
+        #hangupButton {
+            background-color: #dc3545;
+            /* 红色 */
+        }
+
+        #hangupButton:hover {
+            background-color: #a71d2a;
+            /* 深红色 */
+            transform: translateY(-2px);
+        }
+
+        /* 禁用按钮样式 */
+        .button-container button:disabled {
+            background-color: #6c757d;
+            /* 灰色 */
+            cursor: not-allowed;
+        }
+
+        .button-container button:disabled:hover {
+            background-color: #5a6268;
+            /* 深灰色 */
+            transform: none;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>WebRTC Auto Call Test</h1>
+    <div class="video-wrapper">
+        <!-- 本地视频容器 -->
+        <div class="video-container">
+            <span class="video-label">本地</span>
+            <video id="localVideo" autoplay muted></video>
+        </div>
+        <!-- 远程视频容器 -->
+        <div class="video-container">
+            <span class="video-label">远程</span>
+            <video id="remoteVideo" autoplay></video>
+        </div>
+    </div>
+    <!-- 按钮容器 -->
+    <div class="button-container">
+        <button id="callButton">Call</button>
+        <button id="hangupButton" disabled>Hangup</button>
+    </div>
+
+    <script>
+        const userId = "user123"; // 当前用户ID
+        const calleeUserId = "user456"; // 被呼叫用户ID
+        // const configuration = { 'iceServers': [{ 'urls': 'stun:stun.l.google.com:19302' }] };
+        const configuration = {
+            iceServers: [
+                {
+                urls: "stun:192.168.1.10:13478", // STUN 服务器地址
+                },
+                {
+                urls: "turns:192.168.1.10:15349", // TLS 加密的 TURN 服务器
+                username: "1737692601:user123",                 // TURN 用户名
+                credential: "CaoBzTT/lVP37QPsClQmpF3VZd8=",           // TURN 密码
+                }
+            ]
+        };
+        let callId = generateCallId(); // 使用自定义函数生成呼叫ID
+
+        const localVideo = document.getElementById('localVideo');
+        const remoteVideo = document.getElementById('remoteVideo');
+        const callButton = document.getElementById('callButton');
+        const hangupButton = document.getElementById('hangupButton');
+
+        let localStream;
+        let peerConnection;
+        let stompClient;
+
+        // 缓存 ICE 候选地址
+        let iceCandidatesQueue = [];
+        let isRemoteDescriptionSet = false;
+        let remoteIceQueue = []; // 新增
+
+        // 生成唯一的呼叫ID
+        function generateCallId() {
+            return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+                const r = Math.random() * 16 | 0;
+                const v = c === 'x' ? r : (r & 0x3 | 0x8);
+                return v.toString(16);
+            });
+        }
+
+        // 初始化 WebSocket 连接
+        // const socket = new SockJS('https://192.168.1.10:8443/ws?userId=' + userId);
+        const socket = new WebSocket('wss://personal.com.cn:18443/imserver/ws?userId=' + userId);
+        stompClient = Stomp.over(socket);
+        const headers = {
+            'ide': userId
+        };
+
+        stompClient.connect(headers, function (frame) {
+            console.log('Connected: ' + frame);
+
+            // 订阅呼叫响应
+            stompClient.subscribe(`/user/queue/call/response`, function (response) {
+                const message = JSON.parse(response.body);
+                if (message.type === 'ACCEPT') {
+                    console.log('Call accepted by callee.');
+                    startCall();
+                }
+            });
+
+            // 订阅信令消息（Offer/Answer/ICE Candidate）
+            stompClient.subscribe(`/user/queue/rtc/signaling`, function (signaling) {
+                const message = JSON.parse(signaling.body);
+                if (message.type === 'OFFER') {
+                    handleOffer(message);
+                } else if (message.type === 'ANSWER') {
+                    handleAnswer(message);
+                } else if (message.type === 'ICE_CANDIDATE') {
+                    handleIceCandidate(message);
+                }
+            });
+
+            // 订阅呼叫请求（被呼叫方）
+            stompClient.subscribe(`/user/queue/call/request`, function (request) {
+                const message = JSON.parse(request.body);
+                console.log('Received call request:', message);
+                autoAcceptCall(message);
+            });
+        });
+
+        // 发起呼叫
+        callButton.addEventListener('click', () => {
+            sendCallRequest();
+        });
+
+        // 挂断呼叫
+        hangupButton.addEventListener('click', () => {
+            sendCallHangup();
+        });
+
+        // 发送呼叫请求
+        function sendCallRequest() {
+            const callRequest = {
+                callId: callId,
+                type: "VIDEO",
+                callee: calleeUserId,
+                callerUserName: userId,
+                calleeUserName: calleeUserId
+            };
+            stompClient.send("/app/call/request", {}, JSON.stringify(callRequest));
+            console.log('Call request sent:', callRequest);
+        }
+
+        // 自动接受呼叫（被呼叫方）
+        async function autoAcceptCall(message) {
+            console.log('Auto accepting call...');
+            const callResponse = {
+                callId: message.callId,
+                type: "ACCEPT"
+            };
+            stompClient.send("/app/call/response", {}, JSON.stringify(callResponse));
+            console.log('Call response sent:', callResponse);
+
+            // 设置当前通话的 callId
+            callId = message.callId;
+        }
+
+        // 启动视频通话（呼叫方）
+        async function startCall() {
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                localVideo.srcObject = localStream;
+                localVideo.style.display = 'block'; // 显示本地视频
+
+                peerConnection = new RTCPeerConnection(configuration);
+
+                // 监听 ICE 候选地址事件
+                peerConnection.onicecandidate = (event) => {
+                    if (event.candidate) {
+                        // 立即发送，不再等待远程描述
+                        sendIceCandidatesToSignalingServer([event.candidate]);
+                    }
+                };
+
+
+                peerConnection.ontrack = handleTrackEvent;
+
+                localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+                // peerConnection.addStream(localStream);
+
+                const offer = await peerConnection.createOffer();
+                await peerConnection.setLocalDescription(offer);
+
+                stompClient.send("/app/rtc/signaling", {}, JSON.stringify({
+                    callId: callId,
+                    type: "OFFER",
+                    payload: offer.sdp
+                }));
+                console.log('Offer sent:', offer);
+
+                // 更新按钮状态
+                callButton.disabled = true;
+                hangupButton.disabled = false;
+            } catch (error) {
+                console.error('Error starting call:', error);
+            }
+        }
+
+        function sendIceCandidateToPeer(candidate) {
+            if (!candidate || !candidate.candidate) {
+                console.error('无效的ICE候选对象:', candidate);
+                return;
+            }
+
+            const message = {
+                type: 'ICE_CANDIDATE',
+                callId: callId,
+                payload: {
+                    candidate: candidate.candidate,
+                    sdpMid: candidate.sdpMid,
+                    sdpMLineIndex: candidate.sdpMLineIndex
+                }
+            };
+            stompClient.send("/app/rtc/signaling", {}, JSON.stringify(message));
+        }
+
+        // 处理 ICE 候选者
+        function handleIceCandidateEvent(event) {
+            if (event.candidate) {
+                stompClient.send("/app/rtc/signaling", {}, JSON.stringify({
+                    callId: callId,
+                    type: "ICE_CANDIDATE",
+                    payload: {
+                        candidate: event.candidate.candidate,
+                        sdpMid: event.candidate.sdpMid,
+                        sdpMLineIndex: event.candidate.sdpMLineIndex
+                    }
+                }));
+                console.log('ICE candidate sent:', event.candidate);
+            }
+        }
+
+        // 模拟发送 ICE 候选地址到信令服务器
+        function sendIceCandidatesToSignalingServer(candidates) {
+            candidates.forEach(candidate => {
+                stompClient.send("/app/rtc/signaling", {}, JSON.stringify({
+                    callId: callId,
+                    type: "ICE_CANDIDATE",
+                    payload: {
+                        candidate: candidate.candidate,
+                        sdpMid: candidate.sdpMid,
+                        sdpMLineIndex: candidate.sdpMLineIndex
+                    }
+                }));
+            });
+            console.log("ICE候选已发送");
+        }
+
+        // 设置远程描述
+        async function setRemoteDescription(remoteDescription) {
+            await peerConnection.setRemoteDescription(remoteDescription);
+            isRemoteDescriptionSet = true;
+            // 处理缓存的ICE候选
+            remoteIceQueue.forEach(c => {
+                peerConnection.addIceCandidate(c)
+                    .then(() => console.log('已添加缓存的ICE候选'))
+                    .catch(e => console.error(e));
+            });
+            remoteIceQueue = [];
+        }
+
+        // 处理远程视频流
+        function handleTrackEvent(event) {
+            if (event.streams && event.streams.length > 0) {
+                const remoteStream = event.streams[0];
+                // remoteVideo.srcObject = remoteStream;
+
+                // 检查远程视频流的轨道
+                const videoTracks = remoteStream.getVideoTracks();
+                const audioTracks = remoteStream.getAudioTracks();
+
+                remoteVideo.srcObject = remoteStream;
+                remoteVideo.style.display = 'block';
+
+                console.log('Remote video tracks:', videoTracks);
+                console.log('Remote audio tracks:', audioTracks);
+
+                if (videoTracks.length === 0) {
+                    console.error('No video tracks found in remote stream.');
+                }
+            } else {
+                console.error('No remote streams found in track event:', event);
+            }
+        }
+
+        // 处理接收到的 Offer
+        async function handleOffer(message) {
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                localVideo.srcObject = localStream;
+                localVideo.style.display = 'block';
+
+                if (!peerConnection) {
+                    peerConnection = new RTCPeerConnection(configuration);
+
+                    // 简化的ICE候选处理
+                    peerConnection.onicecandidate = (event) => {
+                        if (event.candidate) {
+                            stompClient.send("/app/rtc/signaling", {}, JSON.stringify({
+                                callId: callId,
+                                type: "ICE_CANDIDATE",
+                                payload: {
+                                    candidate: event.candidate.candidate,
+                                    sdpMid: event.candidate.sdpMid,
+                                    sdpMLineIndex: event.candidate.sdpMLineIndex
+                                }
+                            }));
+                        }
+                    };
+
+                    peerConnection.ontrack = handleTrackEvent;
+                    localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+                }
+
+                await setRemoteDescription({
+                    type: 'offer',
+                    sdp: message.payload
+                });
+
+                const answer = await peerConnection.createAnswer();
+                await peerConnection.setLocalDescription(answer);
+
+                stompClient.send("/app/rtc/signaling", {}, JSON.stringify({
+                    callId: callId,
+                    type: "ANSWER",
+                    payload: answer.sdp
+                }));
+
+                // 更新按钮状态
+                callButton.disabled = true;
+                hangupButton.disabled = false;
+            } catch (error) {
+                console.error('处理Offer时出错:', error);
+            }
+        }
+
+        // 处理接收到的 Answer
+        async function handleAnswer(message) {
+            try {
+                if (peerConnection) {
+                    await setRemoteDescription({
+                        type: 'answer',
+                        sdp: message.payload
+                    });
+                }
+            } catch (error) {
+                console.error('Error handling answer:', error);
+            }
+        }
+
+        // 处理接收到的 ICE Candidate
+        function handleIceCandidate(message) {
+            const candidate = new RTCIceCandidate(message.payload);
+            if (peerConnection && peerConnection.remoteDescription) {
+                peerConnection.addIceCandidate(candidate)
+                    .then(() => console.log('ICE候选添加成功'))
+                    .catch(e => console.error('添加失败:', e));
+            } else {
+                remoteIceQueue.push(candidate); // 缓存候选
+                console.log('远程描述未就绪，候选已缓存');
+            }
+        }
+
+        // 挂断通话
+        function sendCallHangup() {
+            stompClient.send("/app/call/hangup", {}, JSON.stringify({ callId: callId }));
+            hangupButton.disabled = true;
+            callButton.disabled = false;
+
+            if (peerConnection) {
+                peerConnection.close();
+                peerConnection = null;
+            }
+
+            // 停止本地视频流
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+                localStream = null;
+            }
+
+            // 隐藏视频
+            localVideo.style.display = 'none';
+            remoteVideo.style.display = 'none';
+            console.log('Call hung up.');
+        }
+    </script>
+</body>
+
+</html>
