@@ -8,7 +8,7 @@ import lombok.ToString;
 @AllArgsConstructor
 @Data
 public class IceServer {
-    private String url;
+    private String urls;
     private String username;
     private String credential;
 }

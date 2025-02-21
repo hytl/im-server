@@ -130,19 +130,17 @@ public class CallService {
         }
     }
 
-    public void hangup(String sessionId) {
+    public void hangup(CallHangupMessage message) {
         lock.lock();
         try {
-            final String callId = ACTIVE_SESSION_CALL_MAP.get(sessionId);
-            if (callId == null) return;
+            String callId = message.getCallId();
+            // 可能被呼叫方还没应答本次呼叫 或 拒绝应答了
             final CallSession callSession = ACTIVE_CALL_SESSION_MAP.get(callId);
             if (callSession == null || CallSession.CallStatus.REJECTED == callSession.getStatus()
                     || CallSession.CallStatus.ENDED == callSession.getStatus()) return;
 
             callSession.setEndTime(LocalDateTime.now());
             callSession.setStatus(CallSession.CallStatus.ENDED);
-
-            CallHangupMessage message = new CallHangupMessage(callId);
 
             // 将挂断消息发送给呼叫者和被呼叫者的user域
             threadUtil.execute(() -> messageService.sendToUserAllOnlineClients(callSession.getCaller()

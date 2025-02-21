@@ -8,7 +8,7 @@
 
    wss://{domain}:{port}/imserver/ws?userId={userId}    // 原生WebSocket
 
-2. CONNECT帧添加ide头传递token
+2. CONNECT帧添加Authorization头传递token
 
 前端参考代码：
 
@@ -17,7 +17,7 @@ const socket = new SockJS('https://{domain}:{port}/imserver/ws?userId={userId}')
 const socket = new WebSocket('wss://{domain}:{port}/imserver/ws?userId={userId}'); // 原生WebSocket
 const stompClient = Stomp.over(socket);
 const headers = {
-    ide:your-auth-token
+    Authorization:your-auth-token
 };
 stompClient.connect(headers, function(frame) {
     console.log('Connected: ' + frame);
@@ -30,7 +30,7 @@ stompClient.connect(headers, function(frame) {
 
 ## HTTP
 
-请求头添加ide，示例：ide:123
+请求头添加Authorization，示例：Authorization:123
 
 接口响应code：小于1000和http状态一致，常用的200（ok）、400（BAD_REQUEST 通常是传参有误）、401（UNAUTHORIZED）、403（FORBIDDEN）、404（NOT_FOUND）、500（INTERNAL_SERVER_ERROR）；
 
@@ -151,20 +151,25 @@ stompClient.connect(headers, function(frame) {
           
         - **HTTP接口** POST /imserver/call/hangup
           
-
-        **请求报文示例：**空
-
-        **HTTP响应报文示例**
-
+          **请求报文示例**
+          
           ```json
-        {
-          "code": 200,
-          "msg": "ok",
-          "data": null
-        }
+          {
+            "callId": "F15D1A7F-907C-605E-9904-3B4A17688754", // 呼叫ID，由Call-Request阶段获取
+          }
+          ```
+          
+          **HTTP响应报文示例**
+          
+          ```json
+          {
+            "code": 200,
+            "msg": "ok",
+            "data": null
+          }
           ```
 
-    - **呼叫超时 Call-Timeout**
+        **呼叫超时 Call-Timeout**
 
         - 呼叫发起后，当超过一定时间（目前30秒）callee每个客户端和caller的呼叫端都会收到呼叫超时消息
         - 订阅地址：/user/queue/call/timeout 报文：{"callId": "F15D1A7F-907C-605E-9904-3B4A17688754", // 呼叫ID}
@@ -242,12 +247,12 @@ stompClient.connect(headers, function(frame) {
   {
       "iceServers": [
           {
-              "url": "stun:192.168.1.10:3478",
+              "url": "stun:example.com:3478",
               "username": null,
               "credential": null
           },
           {
-              "url": "turns:192.168.1.10:5349",
+              "url": "turns:example.com:5349",
               "username": "1738936259:user1",
               "credential": "9x/Nusr5PJwRH7lva8FzX4dZIcs="
           }
@@ -264,12 +269,12 @@ stompClient.connect(headers, function(frame) {
     "data": {
       "iceServers": [
         {
-          "url": "stun:192.168.1.10:3478",
+          "urls": "stun:example.com:3478",
           "username": null,
           "credential": null
         },
         {
-          "url": "turns:192.168.1.10:5349",
+          "urls": "turns:example.com:5349",
           "username": "1739285104:1",
           "credential": "sDt5LMC5oTsUnWCRUGv/nWeQWIc="
         }
@@ -286,7 +291,7 @@ stompClient.connect(headers, function(frame) {
   // 伪代码
   let iceServers = [
       {
-          "url": "stun:stun.example.com:3478"
+          "urls": "stun:stun.example.com:3478"
       },
       {
           urls: "turns:turn.example.com:3478",

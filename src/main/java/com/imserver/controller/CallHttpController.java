@@ -5,6 +5,7 @@ import com.imserver.annotation.WsSessionId;
 import com.imserver.enums.ErrorCode;
 import com.imserver.exception.ImServerException;
 import com.imserver.model.RestResult;
+import com.imserver.model.message.CallHangupMessage;
 import com.imserver.model.message.CallRequestMessage;
 import com.imserver.model.message.CallResponseMessage;
 import com.imserver.service.CallService;
@@ -67,14 +68,14 @@ public class CallHttpController {
      * 挂断
      */
     @PostMapping("/hangup")
-    public RestResult hangup(@UserId String userId, @WsSessionId String wsSessionId) {
+    public RestResult hangup(@Valid @RequestBody CallHangupMessage message, @UserId String userId, @WsSessionId String wsSessionId) {
         if (wsSessionId == null) {
             throw new ImServerException(ErrorCode.FORBIDDEN, "The websocket connection is not established.");
         }
 
         log.debug("Call-Hangup userId {} sessionId {}", userId, wsSessionId);
 
-        callService.hangup(wsSessionId);
+        callService.hangup(message);
 
         return RestResult.ok();
     }

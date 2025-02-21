@@ -2,6 +2,7 @@ package com.imserver.controller;
 
 import com.imserver.annotation.UserSession;
 import com.imserver.model.WsUserSessionMapping;
+import com.imserver.model.message.CallHangupMessage;
 import com.imserver.model.message.CallRequestMessage;
 import com.imserver.model.message.CallResponseMessage;
 import com.imserver.service.CallService;
@@ -49,9 +50,9 @@ public class CallController {
      * 挂断
      */
     @MessageMapping("/hangup")
-    public void hangup(@UserSession WsUserSessionMapping userSession) {
-        log.debug("Call-Hangup userId {} sessionId {}", userSession.userId(), userSession.sessionId());
+    public void hangup(@Valid @Payload CallHangupMessage message, @UserSession WsUserSessionMapping userSession) {
+        log.debug("Call-Hangup callId {} userId {} sessionId {}", message.getCallId(), userSession.userId(), userSession.sessionId());
 
-        callService.hangup(userSession.sessionId());
+        callService.hangup(message);
     }
 }
