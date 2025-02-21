@@ -1,6 +1,7 @@
 package com.imserver.listener;
 
 import com.imserver.context.UserSessionContext;
+import com.imserver.model.UserInfo;
 import com.imserver.model.UserStatus;
 import com.imserver.service.CallService;
 import com.imserver.util.ThreadUtil;
@@ -49,7 +50,7 @@ public class SessionEventListener {
         threadUtil.execute(() -> messagingTemplate.convertAndSend("/topic/user/status"
                 , Collections.singleton(new UserStatus(userId, UserStatus.Status.ONLINE))));
 
-        String username = Optional.ofNullable(UserSessionContext.getUserInfoByUserId(userId).username()).orElse(null);
+        String username = Optional.ofNullable(UserSessionContext.getUserInfoByUserId(userId)).map(UserInfo::username).orElse(null);
 
         log.info("SessionConnectedEvent: 用户SESSION_ID->{} USER_ID->{} USER_NAME->{} 上线", sessionId, userId, username);
     }
@@ -73,7 +74,7 @@ public class SessionEventListener {
         threadUtil.execute(() -> messagingTemplate.convertAndSend("/topic/user/status"
                 , Collections.singleton(new UserStatus(userId, UserStatus.Status.OFFLINE))));
 
-        String username = Optional.ofNullable(UserSessionContext.getUserInfoByUserId(userId).username()).orElse(null);
+        String username = Optional.ofNullable(UserSessionContext.getUserInfoByUserId(userId)).map(UserInfo::username).orElse(null);
 
         UserSessionContext.offline(userId, sessionId);
 
