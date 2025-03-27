@@ -247,12 +247,12 @@ stompClient.connect(headers, function(frame) {
   {
       "iceServers": [
           {
-              "url": "stun:example.com:3478",
+              "urls": "stun:example.com:3478",
               "username": null,
               "credential": null
           },
           {
-              "url": "turns:example.com:5349",
+              "urls": "turns:example.com:5349",
               "username": "1738936259:user1",
               "credential": "9x/Nusr5PJwRH7lva8FzX4dZIcs="
           }
